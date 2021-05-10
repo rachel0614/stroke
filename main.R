@@ -36,28 +36,26 @@ summary(stroke_data)
 stroke_data_modified <- subset(stroke_data, 
                                gender %in% c("Female", "Male"),  
                                select = -c(id))
-levels(droplevels(stroke_data_modified$gender))
+# drop unuseful level
+stroke_data_modified$gender <- factor(as.character(stroke_data_modified$gender))
 #stroke_data_modified[stroke_data_modified$smoking_status=='Unknown', ]
 # 4908 rows 12 columns
 dim(stroke_data_modified)
 str(stroke_data_modified)
-# drop unuseful level
-stroke_data_modified$gender <- factor(as.character(stroke_data_modified$gender))
 ######################  data has been prepared##########
 attach(stroke_data_modified)
 # age, bmi, avg_glucose_level is continuous, do it later
 # gender, smoking status, marital status are categorical, do chisq test
-##################### hypothesis test  #################
+##################### hypothesis test1  ################
 # H0 - gender has no correlation with stroke
 # H1 - gender has correlation with stroke
-# summation of gender
-table(gender)
-# summation of stroke
-table(gender)
-
+# summation of gender and stroke
+table(gender, stroke)
+# hypothesis test
 chisq.test(table(gender, stroke))
-
+##################### hypothesis test2  ################
 chisq.test(table(smoking_status, stroke))
+
 chisq.test(table(ever_married, stroke))
 
 
