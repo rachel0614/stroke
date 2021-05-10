@@ -6,15 +6,15 @@ no_yes_factor <- c("No","Yes")
 # load and convert the below columns 
 stroke_data <- within(read.csv("data/stroke.csv", na = "N/A", 
                                stringsAsFactors = FALSE),{
-     gender <- as.factor(gender)
+     gender <- factor(gender)
      hypertension <- factor(hypertension,labels = no_yes_factor)
      heart_disease <- factor(heart_disease, labels = no_yes_factor)     
-     ever_married <- as.factor(ever_married)    
-     work_type <- as.factor(work_type) 
-     Residence_type <- as.factor(Residence_type) 
-     smoking_status <- as.factor(smoking_status)
+     ever_married <- factor(ever_married)    
+     work_type <- factor(work_type) 
+     Residence_type <- factor(Residence_type) 
+     smoking_status <- factor(smoking_status)
      stroke <- factor(stroke,labels = no_yes_factor)
-     Date <- as.Date(Date,"%A %d %B %Y")
+     Date <- Date(Date,"%A %d %B %Y")
 })
 
 # have a look at the data
@@ -32,17 +32,37 @@ dim(stroke_data)
 # see summary of the dataset
 summary(stroke_data)
 # from the summary, we can see gender variable has outlier 
-stroke_data_modified <- subset(stroke_data, select = -c(id))
-
+# stroke_data_modified <- subset(stroke_data, select = -c(id))
+stroke_data_modified <- subset(stroke_data, 
+                               gender %in% c("Female", "Male"),  
+                               select = -c(id))
+levels(droplevels(stroke_data_modified$gender))
 #stroke_data_modified[stroke_data_modified$smoking_status=='Unknown', ]
 # 4908 rows 12 columns
 dim(stroke_data_modified)
 str(stroke_data_modified)
-names(stroke_data_modified)
-##########data has been prepared############################
+# drop unuseful level
+stroke_data_modified$gender <- factor(as.character(stroke_data_modified$gender))
+######################  data has been prepared##########
+attach(stroke_data_modified)
+# age, bmi, avg_glucose_level is continuous, do it later
+# gender, smoking status, marital status are categorical, do chisq test
+##################### hypothesis test  #################
+# H0 - gender has no correlation with stroke
+# H1 - gender has correlation with stroke
+# summation of gender
+table(gender)
+# summation of stroke
+table(gender)
+
+chisq.test(table(gender, stroke))
+
+chisq.test(table(smoking_status, stroke))
+chisq.test(table(ever_married, stroke))
+
+
 # H0 - gender does not affect stroke status
 # H1 - gender affects stroke_status
-attach(stroke_data_modified)
 plot(stroke_status, age, pch=9,col='lightblue', 
      main = "stroke status vs age")
 # split the dichotomous variables into two group
