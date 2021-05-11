@@ -14,48 +14,115 @@ stroke_data <- within(read.csv("data/stroke.csv", na = "N/A",
      Residence_type <- factor(Residence_type) 
      smoking_status <- factor(smoking_status)
      stroke <- factor(stroke,labels = no_yes_factor)
-     Date <- Date(Date,"%A %d %B %Y")
+     Date <- as.Date(Date,"%A %d %B %Y")
 })
-
-# have a look at the data
+# have a look at the data, to make sure the data type conversion has been done correctly.
 head(stroke_data, 2)
 str(stroke_data)
-# 5110 rows  13 cols
+# check the data amount - 5110 rows  13 cols
 dim(stroke_data)
+
+# processing missing values
 #install.packages("VIM")
 library(VIM) 
 missing_values <- aggr(stroke_data, prop = FALSE, numbers = TRUE)
-# bmi - has null value
+summary(missing_values)
+# only bmi has null values
+
+# remove missing values
 stroke_data <- na.omit(stroke_data)
+
 # 4909 rows 13 columns
 dim(stroke_data)
 # see summary of the dataset
 summary(stroke_data)
-# from the summary, we can see 
-# gender variable has outlier 
-# smoking status has outlier of unknown smking status
-levels(smoking_status)
+
+# according to the summary, remove outliers of gender & smoking_status
+# and discard id & Date variables.
 stroke_data_modified <- subset(stroke_data, 
+                               select = c(-id, -Date), 
                                gender %in% c("Female", "Male") & 
-                               smoking_status %in% c("formerly smoked", 
-                                                     "never smoked",
-                                                     "smokes"))
-# the nonexisted factor of gender has to be dropped
+                               smoking_status != "Unknown")
+str(stroke_data_modified)
+# drop the non-existed factor of gender 
 stroke_data_modified$gender <- 
   factor(as.character(stroke_data_modified$gender))
 stroke_data_modified$smoking_status <- 
   factor(as.character(stroke_data_modified$smoking_status))
 str(stroke_data_modified)
+# check summary to make sure ourlier has been processed properly
+summary(stroke_data_modified)
+
 # we create a new variable which represents whether the patient is or was a smoker
 # according to the smoking status variable
-levels(stroke_data_modified$smoking_status)
-smoker_col <- 
-  (stroke_data_modified$smoking_status = 
-     ifelse(stroke_data_modified$smoking_status %in% c("smokes"),"Yes","No"))  
-stroke_data_modified$smoker <- factor(smoker_col)
+# smoker_col <- 
+#   (stroke_data_modified$smoking_status = 
+#      ifelse(stroke_data_modified$smoking_status %in% c("smokes"),"Yes","No"))  
+# stroke_data_modified$smoker <- factor(smoker_col)
 str(stroke_data_modified)
 dim(stroke_data_modified)
 ######################  data has been prepared##########
+# Lets look at the correlation between both of these variables
+# to evaluate the strength of the relationship
+# and whether it is negative or positive
+library(psych)
+# personal information
+pairs.panels(stroke_data_modified[,
+                                  c("gender", "age", "stroke")], 
+             main = "personal information related variable vs. stroke", 
+             smooth = TRUE,# If TRUE, draws loess smooths    
+             scale = FALSE, # If TRUE, scales the correlation text font    
+             density = TRUE, # If TRUE, adds density plots and histograms    
+             ellipses = TRUE, # If TRUE, draws ellipses    
+             method = "spearman", # Correlation method (also "pearson" or "kendall")    
+             pch = 21, # pch symbol    
+             lm = FALSE, # If TRUE, plots linear fit rather than the LOESS (smoothed) fit    
+             cor = TRUE, # If TRUE, reports correlations    
+             jiggle = FALSE, # If TRUE, data points are jittered    
+             factor = 2, # Jittering factor    
+             hist.col = 4, # Histograms color  # 
+             stars = TRUE, # If TRUE, adds significance level with stars    
+             ci = TRUE) 
+
+# life-style related variables vs stroke
+pairs.panels(stroke_data_modified[,
+                                  c("ever_married",
+                                    "work_type", "Residence_type", 
+                                    "smoking_status", "stroke")], 
+             main = "life-style related variable vs. stroke", 
+             smooth = TRUE,# If TRUE, draws loess smooths    
+             scale = FALSE, # If TRUE, scales the correlation text font    
+             density = TRUE, # If TRUE, adds density plots and histograms    
+             ellipses = TRUE, # If TRUE, draws ellipses    
+             method = "spearman", # Correlation method (also "pearson" or "kendall")    
+             pch = 21, # pch symbol    
+             lm = FALSE, # If TRUE, plots linear fit rather than the LOESS (smoothed) fit    
+             cor = TRUE, # If TRUE, reports correlations    
+             jiggle = FALSE, # If TRUE, data points are jittered    
+             factor = 2, # Jittering factor    
+             hist.col = 4, # Histograms color  # 
+             stars = TRUE, # If TRUE, adds significance level with stars    
+             ci = TRUE) 
+
+pairs.panels(stroke_data_modified[,
+                                  c("hypertension",
+                                    "heart_disease", "avg_glucose_level", 
+                                    "bmi", "stroke")], 
+             main = "health related variable vs. stroke", 
+             smooth = TRUE,# If TRUE, draws loess smooths    
+             scale = FALSE, # If TRUE, scales the correlation text font    
+             density = TRUE, # If TRUE, adds density plots and histograms    
+             ellipses = TRUE, # If TRUE, draws ellipses    
+             method = "spearman", # Correlation method (also "pearson" or "kendall")    
+             pch = 21, # pch symbol    
+             lm = FALSE, # If TRUE, plots linear fit rather than the LOESS (smoothed) fit    
+             cor = TRUE, # If TRUE, reports correlations    
+             jiggle = FALSE, # If TRUE, data points are jittered    
+             factor = 2, # Jittering factor    
+             hist.col = 4, # Histograms color  # 
+             stars = TRUE, # If TRUE, adds significance level with stars    
+             ci = TRUE) 
+#######################################################
 attach(stroke_data_modified)
 # age, bmi, avg_glucose_level is continuous, do it later
 # gender, smoking status, marital status are categorical, do chisq test
@@ -247,6 +314,8 @@ boxplot(avg_glucose_level ~ stroke,
 
 kruskal.test(avg_glucose_level ~ stroke, data = stroke_data_modified)
 #############################bmi
+# H0 - there is not correlation between bmi and stroke
+# H1 - there is correlation between  bmi and stroke
 library(FSA)
 Summarize(bmi ~ stroke,
           data = stroke_data_modified)
@@ -268,9 +337,14 @@ with(stroke_data_modified,
 # from the boxplot and histogram, there is a significant difference in the distribution of age
 # among stroke patients and non-stroke patients
 with(stroke_data_modified, { 
-  qqnorm(bmi[stroke == 'No'], main = 'Stroke patients')  
-  qqline(bmi[stroke == 'No']) 
+  qqnorm(bmi[stroke == 'No' ], main = 'Stroke patients')  
+  qqline(bmi[stroke == 'No' ]) 
 })
 # 看起来是正态分布，需要进一步测试
 # apply One-way ANOVA
 # kruskal.test(bmi ~ stroke, data = stroke_data_modified)
+with(stroke_data_modified, tapply(bmi, stroke, shapiro.test))
+# the p-value of shapiro.test is 1.895e-05, is not normally distributed
+# so we apply kruskal.test
+kruskal.test(bmi ~ stroke, data = stroke_data_modified)
+# the p-value = 0.1841 which is large. so we failed to reject the hypothesis.
