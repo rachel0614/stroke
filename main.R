@@ -205,8 +205,8 @@ normality_test <- shapiro.test(age_stroke_data$age)
 normality_test$p.value
 ###########################test 3 age & stroke###########
 # Whether there is significant difference of patient in mean age
-# H0 - 
-# H1 - 
+# H0 - there is no significant age difference between patients of stroke and non-stroke groups
+# H1 - there is significant age difference between patients of stroke and non-stroke groups
 stroke_data <- stroke_data_modified[stroke_data_modified$stroke
                                     ]
 library(FSA)
@@ -229,3 +229,48 @@ kruskal.test(age ~ stroke, data = stroke_data_modified)
 # as a difference in medians.
 # in this case, the distribution of age in both stroke and non-stroke groups are 
 # has significant difference, so
+#############################gloucos
+stroke_data <- stroke_data_modified[stroke_data_modified$stroke
+]
+library(FSA)
+Summarize(avg_glucose_level ~ stroke,
+          data = stroke_data_modified)
+histogram(~ avg_glucose_level | stroke,
+          data = stroke_data_modified,
+          layout = c(1,2))
+boxplot(avg_glucose_level ~ stroke,
+        data = stroke_data_modified,
+        ylab="avg_glucose_level",
+        xlab="stroke")
+# from the boxplot and histogram, there is a significant difference in the distribution of age
+# among stroke patients and non-stroke patients
+
+kruskal.test(avg_glucose_level ~ stroke, data = stroke_data_modified)
+#############################bmi
+library(FSA)
+Summarize(bmi ~ stroke,
+          data = stroke_data_modified)
+histogram(~ bmi | stroke,
+          data = stroke_data_modified,
+          layout = c(1,2))
+# it seems the samples are normally distributed in both groups 
+boxplot(bmi ~ stroke,
+        data = stroke_data_modified,
+        ylab="bmi",
+        xlab="stroke")
+
+with(stroke_data_modified,
+     qqplot(stroke_data_modified$bmi[stroke_data_modified$stroke == "Yes"],
+            stroke_data_modified$bmi[stroke_data_modified$stroke == "No"],
+            main = "compare 2 samples of patients data",
+            xlab = "stroke = Yes",
+            ylab = "stroke = No"))
+# from the boxplot and histogram, there is a significant difference in the distribution of age
+# among stroke patients and non-stroke patients
+with(stroke_data_modified, { 
+  qqnorm(bmi[stroke == 'No'], main = 'Stroke patients')  
+  qqline(bmi[stroke == 'No']) 
+})
+# 看起来是正态分布，需要进一步测试
+# apply One-way ANOVA
+# kruskal.test(bmi ~ stroke, data = stroke_data_modified)
