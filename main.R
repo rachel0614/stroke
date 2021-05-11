@@ -31,17 +31,30 @@ stroke_data <- na.omit(stroke_data)
 dim(stroke_data)
 # see summary of the dataset
 summary(stroke_data)
-# from the summary, we can see gender variable has outlier 
-# stroke_data_modified <- subset(stroke_data, select = -c(id))
+# from the summary, we can see 
+# gender variable has outlier 
+# smoking status has outlier of unknown smking status
+levels(smoking_status)
 stroke_data_modified <- subset(stroke_data, 
-                               gender %in% c("Female", "Male"),  
-                               select = -c(id))
-# drop unuseful level
-stroke_data_modified$gender <- factor(as.character(stroke_data_modified$gender))
-#stroke_data_modified[stroke_data_modified$smoking_status=='Unknown', ]
-# 4908 rows 12 columns
-dim(stroke_data_modified)
+                               gender %in% c("Female", "Male") & 
+                               smoking_status %in% c("formerly smoked", 
+                                                     "never smoked",
+                                                     "smokes"))
+# the nonexisted factor of gender has to be dropped
+stroke_data_modified$gender <- 
+  factor(as.character(stroke_data_modified$gender))
+stroke_data_modified$smoking_status <- 
+  factor(as.character(stroke_data_modified$smoking_status))
 str(stroke_data_modified)
+# we create a new variable which represents whether the patient is or was a smoker
+# according to the smoking status variable
+levels(stroke_data_modified$smoking_status)
+smoker_col <- 
+  (stroke_data_modified$smoking_status = 
+     ifelse(stroke_data_modified$smoking_status %in% c("smokes"),"Yes","No"))  
+stroke_data_modified$smoker <- factor(smoker_col)
+str(stroke_data_modified)
+dim(stroke_data_modified)
 ######################  data has been prepared##########
 attach(stroke_data_modified)
 # age, bmi, avg_glucose_level is continuous, do it later
@@ -53,19 +66,57 @@ attach(stroke_data_modified)
 table(gender, stroke)
 # hypothesis test
 chisq.test(table(gender, stroke))
-##################### hypothesis test2  ################
+# P-VALUE = 0.517, > 0.05, so we failed to reject H0
+# no correlation between 
+#######################################
+# H0 - smoking has no correlation with stroke
+# H1 - smoking has correlation with stroke
+table(smoking_status, stroke)
 chisq.test(table(smoking_status, stroke))
+# p-value = 1, greater than 0.05, we failed to rejected H0
+#######################################
+table_data <- table(heart_disease, stroke)
+chisq.test(table_data)
+# work_type p-value = 0.0128
+# ever_married p-value = 4.115e-05  < 0.05, reject H0
+# heart_disease p-value = 1.915e-15
+# 婚姻可有效延缓心脏病/中风的进展
+# heart_disease is risk factor of stroke
 
-chisq.test(table(ever_married, stroke))
+##################### hypothesis test2  ################
+# whether smoking there has correlation with stroke
+# see levels of smoking status factor
+# H0 - in general, no correlation between smoke and stroke 
+# H1 - in general, there is correlation between smoke and stroke 
+# get subset which includes only stroke patients
+stroke_smoker_patient_data <- subset(stroke_data_modified, 
+                              stroke == "Yes",  
+                               select = c(id, smoker))
 
+summary(stroke_smoker_patient_data)
+plot(stroke_smoker_patient_data$smoker)
 
-# H0 - gender does not affect stroke status
-# H1 - gender affects stroke_status
-plot(stroke_status, age, pch=9,col='lightblue', 
+freq_table = xtabs( ~ smoker, data = stroke_smoker_patient_data)
+chisq.test(freq_table)
+# p-value = 0.3711 which reject H0
+# so that there is correlation between smoke and stroke
+#############
+head(stroke_data_modified,3)
+mytable <- xtabs( ~ smoker + Stroke, 
+                 data = stroke_data_modified)
+mytable
+head(stroke_data_modified)
+smoker_data <- xtabs( ~ smoker+stroke, data = stroke_patient_data)
+chisq.test(smoker_data)
+#chisq.test(table(ever_married, stroke))
+##########################################
+# H0 - age does not affect stroke status
+# H1 - age affects stroke_status
+plot(stroke, age, pch=9,col='lightblue', 
      main = "stroke status vs age")
 # split the dichotomous variables into two group
 library("lattice")
-histogram(~heart_disease_status | stroke_status, data = stroke_data_modified,
+histogram(~age | stroke, data = stroke_data_modified,
           main = "distribution of stroke & age data",
           xlab = "age (degrees)",
           ylab = "stroke")
@@ -75,29 +126,16 @@ histogram(~heart_disease_status | stroke_status, data = stroke_data_modified,
 qqnorm(age)
 qqline(age, col = "red")
 # check stroke_status
-qqnorm(stroke_status)
-qqline(stroke_status, col = "red")
+qqnorm(stroke)
+qqline(stroke, col = "red")
 # group
 with(stroke_data_modified, { 
-  qqnorm(age[stroke_status == 'Yes'], main = 'stroke data')  
-  qqline(age[stroke_status == 'Yes'], col = "red")
+  qqnorm(age[stroke == 'Yes'], main = 'stroke data')  
+  qqline(age[stroke == 'Yes'], col = "red")
 })
-names(stroke_data_modified)
-# bmi of stroke patients seems to be normally distributed
-# 应该进一步对bmi进行归类后再看
-with(stroke_data_modified[age<70, ], { 
-  qqnorm(bmi[stroke_status == 'Yes'], main = 'bmi stroke data')  
-  qqline(bmi[stroke_status == 'Yes'], col = "red")
-})
-# 限定年龄组后再看bmi
-# 男性人群中风患者基本呈正态分布
-male_stroke_data <- stroke_data_modified[
-  stroke_data_modified$gender == "Male" & 
-  stroke_data_modified$stroke_status=="Yes", ]
-dim(male_stroke_data)
 # 这种图表适用于continuous 和 categorical 是否正态分布判断
 with(male_stroke_data, { 
-  qqnorm(bmi, main = 'bmi distribution of male stroke patients')  
+  qqnorm(age, main = 'bmi distribution of male stroke patients')  
   qqline(bmi, col = "red")
 })
 #
@@ -120,62 +158,11 @@ with(stroke_data_modified, {
 # test 这个不能直接用于categorical variable
 normality_test <- shapiro.test(stroke_data_modified$age)
 normality_test$p.value
-# 用下面这种方式
-with(stroke_data_modified, 
-     tapply(bmi, stroke_status, shapiro.test))
-names(stroke_data_modified)
 # p-value = 1.256842e-31
 # run man-whinney test
-wilcox.test(age ~ stroke_status)
+wilcox.test(age ~ stroke)
 #  p-value < 2.2e-16 so this indicates the Null hypothesis (H0) is rejected
 # this indicates 
-detach(stroke_data_modified)
-names(stroke_data_modified)
-# 查看相关性， 根据生活方式和疾病史进行分类对照
-# 相关性都较弱
-stroke_data_sub1 <- stroke_data_modified[c("hypertension_status",
-                                          "avg_glucose_level",
-                                          "bmi",
-                                          "heart_disease_status",
-                                          "stroke_status")]
-stroke_data_sub2 <- stroke_data_modified[c("work_type",
-                                          "age",
-                                          "gender",
-                                          "ever_married",
-                                          "Residence_type",
-                                          "smoking_status",
-                                          "stroke_status")]
-pairs.panels(stroke_data_sub1,
-             smooth = TRUE,# If TRUE, draws loess smooths    
-             scale = FALSE, # If TRUE, scales the correlation text font    
-             density = TRUE, # If TRUE, adds density plots and histograms    
-             ellipses = TRUE, # If TRUE, draws ellipses    
-             method = "spearman", # Correlation method (also "pearson" or "kendall")    
-             pch = 21, # pch symbol    
-             lm = FALSE, # If TRUE, plots linear fit rather than the LOESS (smoothed) fit    
-             cor = TRUE, # If TRUE, reports correlations    
-             jiggle = FALSE, # If TRUE, data points are jittered    
-             factor = 2, # Jittering factor    
-             hist.col = 4, # Histograms color  # stars = TRUE, # If TRUE, adds significance level with stars    
-             stars = TRUE, 
-             ci = TRUE) 
-pairs.panels(stroke_data_sub2,
-             main = "life stype vs stroke",
-             smooth = TRUE,# If TRUE, draws loess smooths    
-             scale = FALSE, # If TRUE, scales the correlation text font    
-             density = TRUE, # If TRUE, adds density plots and histograms    
-             ellipses = TRUE, # If TRUE, draws ellipses    
-             method = "spearman", # Correlation method (also "pearson" or "kendall")    
-             pch = 21, # pch symbol    
-             lm = FALSE, # If TRUE, plots linear fit rather than the LOESS (smoothed) fit    
-             cor = TRUE, # If TRUE, reports correlations    
-             jiggle = FALSE, # If TRUE, data points are jittered    
-             factor = 2, # Jittering factor    
-             hist.col = 4, # Histograms color  # stars = TRUE, # If TRUE, adds significance level with stars    
-             stars = TRUE, 
-             ci = TRUE) 
-
-# 正态分布
 # 女性未中风患者正态分布
 test_data <- stroke_data_modified[stroke_data_modified$stroke_status=="No", ]
 histogram(~test_data$age | test_data$gender,
@@ -183,13 +170,6 @@ histogram(~test_data$age | test_data$gender,
           main = "distribution of stroke & age data",
           xlab = "age (degrees)",
           ylab = "stroke")
-# gender stroke status
-table(stroke_data_modified$gender, stroke_data_modified$stroke_status)
-
-with(stroke_data_modified, { 
-  qqnorm(gender[stroke_status == 'No'], main = 'Stroke patients')  
-  qqline(gender[stroke_status == 'No']) 
-})
 
 # age 
 boxplot(stroke_data_modified$age, col="skyblue2")
@@ -223,8 +203,29 @@ detach(age_stroke_data)
 
 normality_test <- shapiro.test(age_stroke_data$age)
 normality_test$p.value
+###########################test 3 age & stroke###########
+# Whether there is significant difference of patient in mean age
+# H0 - 
+# H1 - 
+stroke_data <- stroke_data_modified[stroke_data_modified$stroke
+                                    ]
+library(FSA)
+Summarize(age ~ stroke,
+          data = stroke_data_modified)
+histogram(~ age | stroke,
+          data = stroke_data_modified,
+          layout = c(1,2))
+boxplot(age ~ stroke,
+        data = stroke_data_modified,
+        ylab="age",
+        xlab="stroke")
+# from the boxplot and histogram, there is a significant difference in the distribution of age
+# among stroke patients and non-stroke patients
 
-gender_stroke_data <- 
-  subset(stroke_data_modified, select = c("gender", "stroke_status"))
-chisq.test(table(gender_stroke_data))
-                      
+kruskal.test(age ~ stroke, data = stroke_data_modified)
+# p-value is significant small, 
+#  Only in cases where the distributions in each group are similar 
+# can a significant Kruskal–Wallis test be interpreted 
+# as a difference in medians.
+# in this case, the distribution of age in both stroke and non-stroke groups are 
+# has significant difference, so
