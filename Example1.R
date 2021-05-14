@@ -10,4 +10,7 @@ str(race_data)
 attach(race_data)
 chisq.test(table(female, schtyp))
 chisq.test(table(female, race))
-
+## 	Chi-squared test for given probabilities
+chisq.test(table(race), p = c(10, 10, 10, 70)/100)
+summary(race_data)
+str
