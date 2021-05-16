@@ -215,7 +215,7 @@ barplot(prop.table(age_table,2)*100,
 
 chisq.test(age_table)
 # p-value < 2.2e-16, which is far smaller than 0.05
-# so we accept H1 that age has correlation with stroke
+# so we accept H1, that age has correlation with stroke
 
 # H0 - patient age in stroke and non-stroke patients group are equal
 # H1 - patient age in stroke and non-stroke patients group are significant different
@@ -223,11 +223,17 @@ chisq.test(age_table)
 # independent continuous variable - age 
 # dependent categorical variable - stroke (Yes/No)
 # Mann-Withney-Wilcoxon test (use same function with wilcox)
+# view data
+table(age, stroke)
+# test 
 wilcox.test(age ~  stroke)
-# wilcox.test(age ~  stroke, alternative="less")
+# p-value < 2.2e-16, accept H1, age are significantly different
 
-# p-value < 2.2e-16, at 0.05 significance level, we conclude that 
-# age of stroke and non-stroke patients are significantly different.
+# check variance of both groups 
+var.test(age ~ stroke, 
+         data = stroke_data_modified )
+# p-value = 5.485e-13, variance is significantly different
+# so that we don't do one-tailed test to prove stroke patients is older
 
 # smoking hypothesis 
 
@@ -252,16 +258,38 @@ histogram(~age | smoke , data = smoking_stroke_data,
           xlab = "smoking status",
           ylab = "age")
 
-# mean age in stroke patients by smoking status
-tapply(smoking_stroke_data$age , smoking_stroke_data$smoking_status , summary)
+# check variance between both groups
+var.test(age ~ smoke, data = smoking_stroke_data)
+# the variance = 0.8310142 
 
-# H0 - age is equal in three smoking status group of the stroke patients
-# H1 - age is equal in three smoking status group of the stroke patients 
+
+# mean age in stroke patients by smoking status
+# smoking_status - never smoke / formerly somoke / smokes
+# tapply(smoking_stroke_data$age , smoking_stroke_data$smoking_status , summary)
+# smoke - Yesy / No
+tapply(smoking_stroke_data$age , smoking_stroke_data$smoke , summary)
+
+# H0 - age is equal in smoking status group of the stroke patients
+# H1 - age is not equal in smoking status group of the stroke patients 
 # age - continuous 
 # smoking - categorical dichotomous
 wilcox.test(smoking_stroke_data$age ~  smoking_stroke_data$smoke)
 
-# p-value = 0.002014
+# p-value = 0.002014, age in both groups are significantly different
+
+# check variance 
+var.test(smoking_stroke_data$age ~ smoking_stroke_data$smoke, 
+         data = smoking_stroke_data )
+# p-value = 0.4383, ratio of variances is equal
+# so that we do one-tailed test to prove that
+# non-smoker is older
+# H0 - age of non-smoker is equal to smoker
+# H1 - age is greater in smoking group of the stroke patients
+
+wilcox.test(smoking_stroke_data$age ~  smoking_stroke_data$smoke,
+            alternative = "greater")
+# p-value = 0.001007, accept H1, non-smoker is older than smokers in stroke patients
+
 # average glucose level hypothesis
 # 
 # plot the distribution of patients by average glucose level
