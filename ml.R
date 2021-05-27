@@ -21,18 +21,28 @@ stroke_data <- within(read.csv("data/stroke.csv", na = "N/A",
 # have a look at the data, to make sure the data type conversion has been done correctly.
 head(stroke_data, 2)
 str(stroke_data)
+
+# lowercase the variable name
+colnames(stroke_data)[colnames(stroke_data) == "Residence_type"] <- "residence_type"
+colnames(stroke_data)[colnames(stroke_data) == "Date"] <- "date"
+
 # summary of the dataset
 summary(stroke_data)
 
-# id is meaningless for prediction
-# we're not going to do a time related predition model
+
+
+# id is meaningless for prediction, and 
+# we're not going to do a time related predictive model,
 # so we remove these two columns first
 
-stroke_data <- subset(stroke_data, select = -c(id, Date))
+stroke_data <- subset(stroke_data, select = -c(id, date))
 
 # gender
 # remove gender=='Other', just one row
 stroke_data <- stroke_data[stroke_data$gender != 'Other', ]
+# convert from Female/Male to 0/1
+gender_col <- ifelse(stroke_data$gender=='Female', 0, 1)
+stroke_data$gender <- as.factor(gender_col)
 
 # processing missing values
 #install.packages("VIM")
@@ -42,17 +52,16 @@ summary(missing_values)
 # remove missing values (only bmi has null values from the above summary)
 stroke_data <- na.omit(stroke_data)
 
-
 # ever_married
 # convert from No/Yes to 0/1
 marital_status_col <- ifelse(stroke_data$ever_married=='No', 0, 1)
-stroke_data$ever_married <- marital_status_col
+stroke_data$ever_married <- as.factor(marital_status_col)
 
 
 # Residence_type
 # convert from Rural/Urban to 0/1
-residence_type_col <- ifelse(stroke_data$Residence_type=='Rural', 0, 1)
-stroke_data$Residence_type <- residence_type_col
+residence_type_col <- ifelse(stroke_data$residence_type=='Rural', 0, 1)
+stroke_data$residence_type <- as.factor(residence_type_col)
 
 # new variable: diabetes
 # 1 normal <= 140
@@ -64,7 +73,7 @@ diabetes_col <- cut(stroke_data$avg_glucose_level,
                     labels = c(1, 2, 3), 
                     right = FALSE,
                     order = TRUE)
-stroke_data$diabetes <- diabetes_col
+stroke_data$diabetes <- as.factor(diabetes_col)
 
 # generate a new variable: bmi_level
 # 1 underweight < 18.5
@@ -76,51 +85,56 @@ bmi_level_col <- cut(stroke_data$bmi,
                     labels = c(1, 2, 3, 4), 
                     right = TRUE,
                     order = TRUE)
-stroke_data$bmi_level <- bmi_level_col
+stroke_data$bmi_level <- as.factor(bmi_level_col)
 
 # new variable : overweight
 overweight_col <- cut(stroke_data$bmi,
                      breaks = c(0, 25, Inf), 
                      labels = c(0, 1), 
                      right = TRUE,
-                     order = TRUE)
-stroke_data$overweight <- overweight_col
+                     order = FALSE)
+stroke_data$overweight <- as.factor(overweight_col)
 
+# work_type
+# convert labeled factor to 
+stroke_data$work_type <- as.factor(unclass(stroke_data$work_type))
 
-str(stroke_data)
+# smoking_status
+stroke_data$smoking_status <- as.factor(unclass(stroke_data$smoking_status))
+
+# in order to see the value distribution of the categorical variables by summary function,
+# we keep these variables as factor type when doing cleansing & transformation
 summary(stroke_data)
 # backup
 stroke_data_bk <- stroke_data
-# stroke_data <- stroke_data_bk
 
-# there are many factor columns in the dataset
-# convert factor columns to number by using sapply
-# factor level from 1 
-# convert to numeric, set them start from 0
-stroke_data[sapply(stroke_data, is.factor)] <- 
-  data.matrix(stroke_data[sapply(stroke_data, is.factor)]) - 1
-str(stroke_data)
-# dummy categorical columns
+# from the summary, we can see all the dichotomous categorical variables (only 2 types)  
+# have been converted to 0/1, including  
+dich_cols = c("gender", "hypertension", "heart_disease", "ever_married", 
+              "residence_type", "stroke", "overweight")
+
+# convert these variables to numeric
+stroke_data[, dich_cols] <- 
+  apply(stroke_data[, dich_cols], 2, function(x) as.numeric(x))
+
+
+# now dummy encode those categorical variables which have over three levels
+# including work_type,smoking_status,diabetes,bmi_level
+
 library(fastDummies)
 stroke_data_dummy <- dummy_cols(stroke_data, 
            select_columns = c("work_type", "smoking_status", "diabetes", "bmi_level"), 
            remove_first_dummy = FALSE)
 str(stroke_data_dummy)
+summary(stroke_data_dummy)
 
 
 # remove unused variables
 stroke_data_dummy <- subset(stroke_data_dummy, 
-                      select = -c(id, Date, work_type, smoking_status, diabetes, 
-                                  bmi, bmi_level))
-
-age_col <- cut(stroke_data_dummy$age,
-               breaks = c(0, 10, 20, 30, 40, 50, 60, 70,Inf), 
-               labels = c(1, 2, 3, 4, 5, 6, 7, 8), 
-               right = FALSE,
-               order = TRUE)
-stroke_data_dummy$age_level <- as.numeric(age_col)
-
+                      select = -c(work_type, smoking_status, diabetes, bmi_level))
 str(stroke_data_dummy)
+
+###############################data variables have been prepared################
 attach(stroke_data_dummy)
 library(psych)
 # pairs.panels(stroke_data_dummy, 
@@ -138,7 +152,6 @@ library(psych)
 #              stars = TRUE,
 #              ci = TRUE) # If TRUE, adds confidence intervals 
 
-attach(stroke_data_dummy)
 # correlation table
 res <- cor(stroke_data_dummy)
 round(res, 2)
