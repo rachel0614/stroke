@@ -114,28 +114,68 @@ dich_cols = c("gender", "hypertension", "heart_disease", "ever_married",
               "residence_type", "stroke", "overweight")
 
 # convert these variables to numeric
-stroke_data[, dich_cols] <- 
-  apply(stroke_data[, dich_cols], 2, function(x) as.numeric(x))
+# stroke_data[, dich_cols] <- 
+  # apply(stroke_data[, dich_cols], 2, function(x) as.numeric(x))
 
 
 # now dummy encode those categorical variables which have over three levels
 # including work_type,smoking_status,diabetes,bmi_level
-
+# dummy these categorical columns 
 library(fastDummies)
 stroke_data_dummy <- dummy_cols(stroke_data, 
            select_columns = c("work_type", "smoking_status", "diabetes", "bmi_level"), 
-           remove_first_dummy = FALSE)
+           remove_first_dummy = FALSE,
+           remove_selected_columns = TRUE)
 str(stroke_data_dummy)
 summary(stroke_data_dummy)
 
+# new generated dummy column names 
+# start from the position where behind overweight variable
+dummy_cols <- colnames(stroke_data_dummy[,-c(1:which(colnames(stroke_data_dummy)=="overweight"))])
+# convert to factor
+stroke_data_dummy[,dummy_cols] <- lapply(stroke_data_dummy[,dummy_cols] , factor)
 
-# remove unused variables
-stroke_data_dummy <- subset(stroke_data_dummy, 
-                      select = -c(work_type, smoking_status, diabetes, bmi_level))
 str(stroke_data_dummy)
-
+summary(stroke_data_dummy)
 ###############################data variables have been prepared################
 attach(stroke_data_dummy)
+# colnames(stroke_data_dummy)
+# stepwise regression
+
+# training & testing dataset
+set.seed(1)
+no_rows_data <- nrow(stroke_data_dummy)
+sample <- sample(1:no_rows_data, size = round(0.7 * no_rows_data), replace = FALSE) 
+
+training_data <- stroke_data_dummy[sample, ]
+testing_data <- stroke_data_dummy[-sample, ]
+# gender + hypertension + heart_disease +     
+#   ever_married + residence_type + avg_glucose_level + bmi +               
+#   stroke + overweight + work_type_1 + work_type_2 +       
+#   work_type_3 + work_type_4 + work_type_5 + smoking_status_1 +  
+#   smoking_status_2 + smoking_status_3 + smoking_status_4 + diabetes_1 +        
+#   diabetes_2 + diabetes_3 + bmi_level_1 + bmi_level_2 +       
+#   bmi_level_3 + bmi_level_4                  
+fit <- lm(age ~ 
+             gender + hypertension + heart_disease +     
+             ever_married + avg_glucose_level + 
+             bmi +
+             stroke ,
+           data = stroke_data_dummy)
+
+summary(fit)
+
+confint(fit)
+
+
+# visualization
+library(car)
+qqPlot(fit, labels=row.names(stroke_data_dummy), 
+       id.method="identify", 
+       simulate=TRUE, 
+       main="Q-Q Plot")
+
+
 library(psych)
 # pairs.panels(stroke_data_dummy, 
 #              smooth = TRUE, # If TRUE, draws loess smooths  
