@@ -44,6 +44,7 @@ stroke_data <- stroke_data[stroke_data$gender != 'Other', ]
 gender_col <- ifelse(stroke_data$gender=='Female', 0, 1)
 stroke_data$gender <- as.factor(gender_col)
 
+levels(stroke_data$smoking_status)
 # processing missing values
 #install.packages("VIM")
 library(VIM) 
@@ -105,35 +106,36 @@ stroke_data$smoking_status <- as.factor(unclass(stroke_data$smoking_status))
 # in order to see the value distribution of the categorical variables by summary function,
 # we keep these variables as factor type when doing cleansing & transformation
 summary(stroke_data)
-# backup
-stroke_data_bk <- stroke_data
-
 # from the summary, we can see all the dichotomous categorical variables (only 2 types)  
 # have been converted to 0/1, including  
 dich_cols = c("gender", "hypertension", "heart_disease", "ever_married", 
               "residence_type", "stroke", "overweight")
 
 # convert these variables to numeric
-# stroke_data[, dich_cols] <- 
-  # apply(stroke_data[, dich_cols], 2, function(x) as.numeric(x))
+stroke_data[, dich_cols] <-
+  apply(stroke_data[, dich_cols], 2, function(x) as.numeric(x))
 
-
+# categorical variables with more than 2 levels
+dummy_cols <- c("work_type", "smoking_status", "diabetes", "bmi_level")
 # now dummy encode those categorical variables which have over three levels
 # including work_type,smoking_status,diabetes,bmi_level
 # dummy these categorical columns 
 library(fastDummies)
+# keep the dummy variables
 stroke_data_dummy <- dummy_cols(stroke_data, 
-           select_columns = c("work_type", "smoking_status", "diabetes", "bmi_level"), 
+           select_columns = dummy_cols, 
            remove_first_dummy = FALSE,
-           remove_selected_columns = TRUE)
+           remove_selected_columns = FALSE)
 str(stroke_data_dummy)
 summary(stroke_data_dummy)
 
+# convert these dummied variables to numeric
+stroke_data_dummy[, dummy_cols] <-
+  apply(stroke_data_dummy[, dummy_cols], 2, function(x) as.numeric(x))
+
 # new generated dummy column names 
-# start from the position where behind overweight variable
-dummy_cols <- colnames(stroke_data_dummy[,-c(1:which(colnames(stroke_data_dummy)=="overweight"))])
 # convert to factor
-stroke_data_dummy[,dummy_cols] <- lapply(stroke_data_dummy[,dummy_cols] , factor)
+# stroke_data_dummy[,dummy_cols] <- lapply(stroke_data_dummy[,dummy_cols] , factor)
 
 str(stroke_data_dummy)
 summary(stroke_data_dummy)
@@ -142,6 +144,87 @@ attach(stroke_data_dummy)
 # colnames(stroke_data_dummy)
 # stepwise regression
 
+# check correlation of variables
+stroke_matrix <- cor (stroke_data_dummy[1:12])
+# corrplot(stroke_matrix, method = "number") 
+corrplot(stroke_matrix, type = "upper")
+# initial model
+fit <- lm(age ~ 
+             hypertension + heart_disease +     
+             ever_married +  
+             bmi + stroke + diabetes,
+           data = stroke_data_dummy)
+
+summary(fit)
+confint(fit)
+attach(stroke_data_dummy)
+# outliers
+library("car")
+# qqplot continous variables
+qqPlot(stroke_data_dummy$bmi,
+              main = "bmi")
+
+plot(fit, pch = 10, cex = 2, main="Influential observations ") 
+abline(h = 4 * mean(fit, na.rm=T), col="red")  # add cutoff line
+text(x = 1:length(fit) + 1, y = fit, 
+     labels=ifelse(fit > 4 * mean(fit, na.rm = T), 
+                   names(lm),""),col="red")
+# list outliers' value
+stroke_data_dummy[c(4030,2020, 181), c("bmi") ]
+# remove the clearly wrong collected data
+# two rows are removed
+stroke_data_dummy <- stroke_data_dummy[-c(2020, 4030), ]
+
+# the model improved a little
+# replace the diabetes with dummied variables
+fit <- lm(age ~ 
+            hypertension + heart_disease +     
+            ever_married +  
+            bmi + stroke + diabetes_1 + diabetes_2 + diabetes_3,
+          data = stroke_data_dummy)
+summary(fit)
+# improved 1%
+# remove diabetes_3, bmi 
+fit <- lm(age ~ 
+            hypertension + heart_disease +     
+            ever_married + 
+            work_type_1 + work_type_2 + work_type_3 + work_type_4 + 
+            smoking_status_1 +  smoking_status_3 + 
+            overweight + stroke + diabetes_1 + diabetes_2 ,
+          data = stroke_data_dummy)
+summary(fit)
+# remove variables according to the correlation matrix
+# remove - gender, residence type,
+# add - work_type
+
+# histogram of the studentized
+# residuals and superimposes a normal curve, kernel-density curve, and rug plot
+student_fit <- rstudent(fit)
+hist(student_fit,
+     breaks = 10,
+     freq = FALSE,
+     xlab = "studentized residual",
+     main = "distribution of errors")
+rug(jitter(student_fit), col = "brown")
+curve(dnorm(x, mean = mean(student_fit), 
+            sd = sd(student_fit)),
+      add = TRUE, col = "blue", lwd = 2)
+lines(density(student_fit)$x, density(student_fit)$y, 
+      col = "red", lwd = 2, lty = 2)
+legend("topright", legend = c("normal curve", "kernel density curve"), 
+       lty = 1:2, col = c("blue", "red"), cex = 0.7)
+
+# 
+# 
+# visualization
+library(car)
+qqPlot(fit, labels=row.names(stroke_data_dummy), 
+       id.method="identify", 
+       simulate=TRUE, 
+       main="Q-Q Plot")
+
+
+
 # training & testing dataset
 set.seed(1)
 no_rows_data <- nrow(stroke_data_dummy)
@@ -149,31 +232,8 @@ sample <- sample(1:no_rows_data, size = round(0.7 * no_rows_data), replace = FAL
 
 training_data <- stroke_data_dummy[sample, ]
 testing_data <- stroke_data_dummy[-sample, ]
-# gender + hypertension + heart_disease +     
-#   ever_married + residence_type + avg_glucose_level + bmi +               
-#   stroke + overweight + work_type_1 + work_type_2 +       
-#   work_type_3 + work_type_4 + work_type_5 + smoking_status_1 +  
-#   smoking_status_2 + smoking_status_3 + smoking_status_4 + diabetes_1 +        
-#   diabetes_2 + diabetes_3 + bmi_level_1 + bmi_level_2 +       
-#   bmi_level_3 + bmi_level_4                  
-fit <- lm(age ~ 
-             gender + hypertension + heart_disease +     
-             ever_married + avg_glucose_level + 
-             bmi +
-             stroke ,
-           data = stroke_data_dummy)
-
-summary(fit)
-
-confint(fit)
 
 
-# visualization
-library(car)
-qqPlot(fit, labels=row.names(stroke_data_dummy), 
-       id.method="identify", 
-       simulate=TRUE, 
-       main="Q-Q Plot")
 
 
 library(psych)
@@ -206,7 +266,7 @@ res2$P
 # visualization the correlation
 install.packages("corrplot")
 library(corrplot)
-corrplot(res, 
+corrplot(res2, 
          type = "upper", 
          order = "hclust", 
          tl.col = "black", 
