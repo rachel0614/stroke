@@ -21,7 +21,6 @@ stroke_data <- within(read.csv("data/stroke.csv", na = "N/A",
 # have a look at the data, to make sure the data type conversion has been done correctly.
 head(stroke_data, 2)
 str(stroke_data)
-
 # lowercase the variable name
 colnames(stroke_data)[colnames(stroke_data) == "Residence_type"] <- "residence_type"
 colnames(stroke_data)[colnames(stroke_data) == "Date"] <- "date"
@@ -128,7 +127,6 @@ stroke_data_dummy <- dummy_cols(stroke_data,
            remove_selected_columns = FALSE)
 str(stroke_data_dummy)
 summary(stroke_data_dummy)
-
 # convert these dummied variables to numeric
 stroke_data_dummy[, dummy_cols] <-
   apply(stroke_data_dummy[, dummy_cols], 2, function(x) as.numeric(x))
@@ -139,63 +137,81 @@ stroke_data_dummy[, dummy_cols] <-
 
 str(stroke_data_dummy)
 summary(stroke_data_dummy)
+# stroke_data_dummy <- stroke_data_dummy[stroke_data_dummy$age >= 1, ]
 ###############################data variables have been prepared################
 attach(stroke_data_dummy)
-# colnames(stroke_data_dummy)
-# stepwise regression
 
+library(data.table)
+library(dplyr)
+library(formattable)
+library(tidyr)
+library(corrplot)
 # check correlation of variables
-stroke_matrix <- cor (stroke_data_dummy[1:12])
-# corrplot(stroke_matrix, method = "number") 
-corrplot(stroke_matrix, type = "upper")
+stroke_matrix <- cor (stroke_data_dummy[1:14])
+round(stroke_matrix, 2)
+corrplot(stroke_matrix, type = "upper", 
+         number.cex=0.30)
+
+attach(stroke_data_dummy)
+
 # initial model
+# fit <- lm(age ~ 
+#              hypertension + heart_disease +     
+#              overweight + ever_married +  work_type + 
+#              stroke + diabetes,
+#                      data = stroke_data_dummy)
+# 
+# summary(fit)
 fit <- lm(age ~ 
-             hypertension + heart_disease +     
-             ever_married +  
-             bmi + stroke + diabetes,
-           data = stroke_data_dummy)
+            hypertension + heart_disease +     
+            bmi + avg_glucose_level +  
+            work_type_1 + work_type_2 + work_type_3 + work_type_4 + work_type_5 +
+            stroke + 
+            smoking_status_1 + smoking_status_2 + smoking_status_3 + 
+            smoking_status_4 ,
+          data = stroke_data_dummy)
 
 summary(fit)
-confint(fit)
-attach(stroke_data_dummy)
+
 # outliers
+library(qqplot)
 library("car")
+library(boxplot)
 # qqplot continous variables
 qqPlot(stroke_data_dummy$bmi,
               main = "bmi")
+qqPlot(stroke_data_dummy$avg_glucose_level,
+       main = "avg_glucose_level")
+
 
 plot(fit, pch = 10, cex = 2, main="Influential observations ") 
 abline(h = 4 * mean(fit, na.rm=T), col="red")  # add cutoff line
 text(x = 1:length(fit) + 1, y = fit, 
      labels=ifelse(fit > 4 * mean(fit, na.rm = T), 
                    names(lm),""),col="red")
+
 # list outliers' value
-stroke_data_dummy[c(4030,2020, 181), c("bmi") ]
+# stroke_data_dummy[c(4030,2020, 181), c("bmi") ]
+stroke_data_dummy[c(4030, 2020, 181), c('age', 'bmi', 'avg_glucose_level')]
+stroke_data_dummy[c(873, 100, 18), c('age', 'bmi', 'avg_glucose_level')]
+
 # remove the clearly wrong collected data
 # two rows are removed
-stroke_data_dummy <- stroke_data_dummy[-c(2020, 4030), ]
-
+stroke_data_dummy <- stroke_data_dummy[-c(4030, 2020, 181), ]
 # the model improved a little
 # replace the diabetes with dummied variables
+
+# recheck the model
 fit <- lm(age ~ 
             hypertension + heart_disease +     
-            ever_married +  
-            bmi + stroke + diabetes_1 + diabetes_2 + diabetes_3,
+            bmi + avg_glucose_level +  
+            work_type_1 + work_type_2 + work_type_3 + work_type_4 + work_type_5 +
+            stroke + 
+            smoking_status_1 + smoking_status_2 + smoking_status_3 + 
+            smoking_status_4 ,
           data = stroke_data_dummy)
+
 summary(fit)
-# improved 1%
-# remove diabetes_3, bmi 
-fit <- lm(age ~ 
-            hypertension + heart_disease +     
-            ever_married + 
-            work_type_1 + work_type_2 + work_type_3 + work_type_4 + 
-            smoking_status_1 +  smoking_status_3 + 
-            overweight + stroke + diabetes_1 + diabetes_2 ,
-          data = stroke_data_dummy)
-summary(fit)
-# remove variables according to the correlation matrix
-# remove - gender, residence type,
-# add - work_type
 
 # histogram of the studentized
 # residuals and superimposes a normal curve, kernel-density curve, and rug plot
@@ -218,128 +234,61 @@ legend("topright", legend = c("normal curve", "kernel density curve"),
 # 
 # visualization
 library(car)
-qqPlot(fit, labels=row.names(stroke_data_dummy), 
-       id.method="identify", 
-       simulate=TRUE, 
-       main="Q-Q Plot")
-
-
-
-# training & testing dataset
-set.seed(1)
-no_rows_data <- nrow(stroke_data_dummy)
-sample <- sample(1:no_rows_data, size = round(0.7 * no_rows_data), replace = FALSE) 
-
-training_data <- stroke_data_dummy[sample, ]
-testing_data <- stroke_data_dummy[-sample, ]
-
-
-
-
-library(psych)
-# pairs.panels(stroke_data_dummy, 
-#              smooth = TRUE, # If TRUE, draws loess smooths  
-#              scale = FALSE, # If TRUE, scales the correlation text font  
-#              density = TRUE, # If TRUE, adds density plots and histograms  
-#              ellipses = TRUE, # If TRUE, draws ellipses   
-#              method = "spearman",# Correlation method (also "pearson" or "kendall") 
-#              pch = 21, # pch symbol   
-#              lm = FALSE, # If TRUE, plots linear fit rather than the LOESS (smoothed) fit 
-#              cor = TRUE, # If TRUE, reports correlations
-#              jiggle = FALSE, # If TRUE, data points are jittered  
-#              factor = 2, # Jittering factor  
-#              hist.col = 4, # Histograms color   
-#              stars = TRUE,
-#              ci = TRUE) # If TRUE, adds confidence intervals 
-
-# correlation table
-res <- cor(stroke_data_dummy)
-round(res, 2)
-# correlation table2
-install.packages("Hmisc")
-library("Hmisc")
-res2 <- rcorr(as.matrix(stroke_data_dummy))
-res2
-rcorr(stroke_data_dummy, type = c("pearson","spearman"))
-res2$r
-res2$P
-# visualization the correlation
-install.packages("corrplot")
-library(corrplot)
-corrplot(res2, 
-         type = "upper", 
-         order = "hclust", 
-         tl.col = "black", 
-         tl.srt = 45)
-
-# Insignificant correlation are crossed
-corrplot(res2$r, type="upper", order="hclust", 
-         p.mat = res2$P, sig.level = 0.01, insig = "blank")
-# Insignificant correlations are leaved blank
-corrplot(res2$r, type="upper", order="hclust", 
-         p.mat = res2$P, sig.level = 0.01, insig = "blank")
-# 
-install.packages("PerformanceAnalytics")
-library("PerformanceAnalytics")
-# big & slow
-# chart.Correlation(stroke_data_dummy, histogram=TRUE, pch=19)
-
-boxplot(stroke_data_dummy[, c("age",  "bmi", "avg_glucose_level")])
-# generate glucose value to diabetes status
-# str(stroke_data_dummy)
-# model
-str(stroke_data_dummy)
-model <- lm(age_level ~ gender + stroke + hypertension + 
-              heart_disease + ever_married + 
-              Residence_type + diabetes_0 + diabetes_1 + diabetes_2 + 
-              bmi + work_type_1 + work_type_2 + 
-              work_type_3 + work_type_4 + 
-              smoking_status_1 + smoking_status_2 + smoking_status_3, 
-            data = stroke_data_dummy)
-summary(model)
-# select variables
-model <- lm(age_level ~ stroke + ever_married + 
-              Residence_type + 
-              bmi_level_0 + bmi_level_1 + bmi_level_2 + bmi_level_3, 
-            data = stroke_data_dummy)
-summary(model)
-# train & test
-# create training & testing data
-set.seed(1)
-no_rows_data <- nrow(stroke_data_dummy)
-# use 70% and don't use it again
-sample_data <- sample(1 : no_rows_data, size = round(0.7 * no_rows_data),
-                      replace = FALSE)
-training_data <- stroke_data_dummy[sample_data, ]
-testing_data <- stroke_data_dummy[-sample_data, ]
-
-fit <- lm(age_level ~ stroke + 
-            bmi_level_0 + bmi_level_1 + bmi_level_2 + bmi_level_3, data=training_data)
-summary(fit)
-confint(fit)
-# 
-library(car)
-qqPlot(fit, 
-       labels=row.names(states), 
-       id.method="identify", 
-       simulate=TRUE, main="Q-Q Plot")
-student_fit <- rstudent(fit)
-hist(student_fit, 
-     breaks=10, 
-     freq=FALSE, 
-     xlab="Studentized Residual", 
-     main="Distribution of Errors")
-
-rug(jitter(student_fit), col="brown")
-curve(dnorm(x, mean=mean(student_fit), sd=sd(student_fit)), add=TRUE, col="blue", lwd=2)
-lines(density(student_fit)$x, density(student_fit)$y, col="red", lwd=2, lty=2)
-legend("topright", legend = c( "Normal Curve", "Kernel Density Curve"), lty=1:2, col=c("blue","red"), cex=.7)
-
 outlierTest(fit)
+# p-value is 2.7031e-05 
+# delete this outlier
+stroke_data_dummy[c(518), ]
+stroke_data_dummy <- stroke_data_dummy[-c(518), ]
 
+# rebuild model
+fit <- lm(age ~ 
+            hypertension + heart_disease +     
+            ever_married + 
+            work_type_1 + work_type_2 + work_type_3 + work_type_4 + 
+            smoking_status_1 +  smoking_status_3 + 
+            overweight + stroke + diabetes_1 + diabetes_2 ,
+          data = stroke_data_dummy)
+summary(fit)
+# test outliers
+outlierTest(fit)
+# check if the outliers has been removed
 
-# predict
-prob <- predict(model, testing_data, type = "response")
-# pred <- factor(prob > 0.5, levels = c(FALSE, TRUE))
-lr.perf <- table(testing_data$age_level, prob, dnn = c("Actual", "Predicted"))
-lr.perf
+# test normality of the model
+qqnorm(rstudent(fit))
+qqline(rstudent(fit))
+# upper end improved but the lower end is highly skewes
+
+# test age distribution
+hist(stroke_data_dummy$age)
+summary(stroke_data_dummy$age)
+detach(stroke_data_dummy)
+
+# subset
+# many independent in this dataset are obviously adult related features,
+# such as marital status, smoking status
+# under age patients only account for a small proportion
+str(stroke_data_dummy[stroke_data_dummy$age >= 18, ])
+
+# so we adjust the dataset to adult subset
+stroke_data_adult <- stroke_data_dummy[stroke_data_dummy$age >= 18, ]
+hist(stroke_data_adult$age)
+
+attach(stroke_data_adult)
+# rebuild the model
+stroke_data_adult$log_age <- log(stroke_data_adult$age)
+fit <- lm(log_age ~ 
+            hypertension + heart_disease +     
+            ever_married + 
+            work_type_1 + work_type_2 + work_type_3 + work_type_4 + 
+            smoking_status_1 +  smoking_status_3 + 
+            overweight + stroke + diabetes_1 + diabetes_2 ,
+          data = stroke_data_adult)
+summary(fit)
+# test outliers
+outlierTest(fit)
+# check if the outliers has been removed
+
+# test normality of the model
+qqnorm(rstudent(fit))
+qqline(rstudent(fit))
+
