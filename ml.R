@@ -1,7 +1,3 @@
-# examples
-# http://rstudio-pubs-static.s3.amazonaws.com/74431_8cbd662559f6451f9cd411545f28107f.html
-# https://zhuanlan.zhihu.com/p/31642344
-# https://bvasiles.github.io/empirical-methods/slides/15-zscore.html
 # my os (windows Chinese version)
 # the date format converts incorrectly without setting the locale
 Sys.setlocale("LC_TIME", "English")
@@ -28,14 +24,10 @@ colnames(stroke_data)[colnames(stroke_data) == "Date"] <- "date"
 # summary of the dataset
 summary(stroke_data)
 
-
-
-# id is meaningless for prediction, and 
 # we're not going to do a time related predictive model,
-# so we remove these two columns first
+# so we remove it first
+stroke_data <- subset(stroke_data, select = -c(date))
 
-# stroke_data <- subset(stroke_data, select = -c(id, date))
-stroke_data <- subset(stroke_data, select = -c( date))
 # gender
 # remove gender=='Other', just one row
 stroke_data <- stroke_data[stroke_data$gender != 'Other', ]
@@ -43,9 +35,8 @@ stroke_data <- stroke_data[stroke_data$gender != 'Other', ]
 gender_col <- ifelse(stroke_data$gender=='Female', 0, 1)
 stroke_data$gender <- as.factor(gender_col)
 
-levels(stroke_data$smoking_status)
 # processing missing values
-#install.packages("VIM")
+# install.packages("VIM")
 library(VIM) 
 missing_values <- aggr(stroke_data, prop = FALSE, numbers = TRUE)
 summary(missing_values)
@@ -63,130 +54,73 @@ stroke_data$ever_married <- as.factor(marital_status_col)
 residence_type_col <- ifelse(stroke_data$residence_type=='Rural', 0, 1)
 stroke_data$residence_type <- as.factor(residence_type_col)
 
-# new variable: diabetes
-# 1 normal <= 140
-# 2 pre-diabetes  <= 199
-# 3 diabetes >199
-# create a new variable diabetes to indicate the diabetes status
-# diabetes_col <- cut(stroke_data$avg_glucose_level,
-#                     breaks = c(0, 140, 199, Inf), 
-#                     labels = c(1, 2, 3), 
-#                     right = FALSE,
-#                     order = TRUE)
-# stroke_data$diabetes <- as.factor(diabetes_col)
-
-# generate a new variable: bmi_level
-# 1 underweight < 18.5
-# 2 normal >=18.5
-# 3 overweight >=25
-# 4 obese >= 30
-# bmi_level_col <- cut(stroke_data$bmi,
-#                     breaks = c(0, 18.5, 25, 30, Inf), 
-#                     labels = c(1, 2, 3, 4), 
-#                     right = TRUE,
-#                     order = TRUE)
-# stroke_data$bmi_level <- as.factor(bmi_level_col)
 
 # new variable : overweight
-# overweight_col <- cut(stroke_data$bmi,
-#                      breaks = c(0, 25, Inf), 
-#                      labels = c(0, 1), 
-#                      right = TRUE,
-#                      order = FALSE)
-# stroke_data$overweight <- as.factor(overweight_col)
+overweight_col <- cut(stroke_data$bmi,
+                      breaks = c(0, 25, Inf),
+                      labels = c(0, 1),
+                      right = FALSE,
+                      order = FALSE)
+stroke_data$overweight <- as.factor(overweight_col)
 
 # work_type
 # convert labeled factor to 
 stroke_data$work_type <- as.factor(unclass(stroke_data$work_type))
 
-# smoking_status
+# represent smoking_status by number
 stroke_data$smoking_status <- as.factor(unclass(stroke_data$smoking_status))
 
 # in order to see the value distribution of the categorical variables by summary function,
 # we keep these variables as factor type when doing cleansing & transformation
 summary(stroke_data)
+
 # from the summary, we can see all the dichotomous categorical variables (only 2 types)  
 # have been converted to 0/1, including  
-# dich_cols = c("gender", "hypertension", "heart_disease", "ever_married", 
-#               "residence_type", "stroke", "overweight")
 dich_cols = c("gender", "hypertension", "heart_disease", "ever_married", 
-              "residence_type", "stroke")
+              "residence_type", "stroke", "overweight")
 
-# convert these variables to numeric
+# convert these dichotomous variables to numeric
 stroke_data[, dich_cols] <-
   apply(stroke_data[, dich_cols], 2, function(x) as.numeric(x))
 
-# categorical variables with more than 2 levels
-# dummy_cols <- c("work_type", "smoking_status", "diabetes", "bmi_level")
-
+# norminal variables 
 dummy_cols <- c("work_type", "smoking_status")
+
 # now dummy encode those categorical variables which have over three levels
-# including work_type,smoking_status,diabetes,bmi_level
-# dummy these categorical columns 
 library(fastDummies)
 # keep the dummy variables
 stroke_data_dummy <- dummy_cols(stroke_data, 
-           select_columns = dummy_cols, 
-           remove_first_dummy = FALSE,
-           remove_selected_columns = TRUE)
+                                select_columns = dummy_cols, 
+                                remove_first_dummy = FALSE,
+                                remove_selected_columns = TRUE)
 str(stroke_data_dummy)
 summary(stroke_data_dummy)
-# convert these dummied variables to numeric
-# stroke_data_dummy[, dummy_cols] <-
-#   apply(stroke_data_dummy[, dummy_cols], 2, function(x) as.numeric(x))
-
-# new generated dummy column names 
-# convert to factor
-# stroke_data_dummy[,dummy_cols] <- lapply(stroke_data_dummy[,dummy_cols] , factor)
-
-str(stroke_data_dummy)
-summary(stroke_data_dummy)
+# set rownames as id
+rownames(stroke_data_dummy) <- stroke_data_dummy$id 
 ###############################data variables have been prepared################
 attach(stroke_data_dummy)
-
+opar <- par(no.readonly = TRUE)
 library(data.table)
 library(dplyr)
-library(formattable)
 library(tidyr)
 library(corrplot)
-# check correlation of variables
-continuous_data <- subset(stroke_data_dummy, select = c(age, avg_glucose_level, bmi))
-dichotomous_data <- subset(stroke_data_dummy, select = -c(avg_glucose_level, bmi, id))
+library(scorecard)
 
-# check normality of dependent variable
-shapiro.test(age)
-hist(age, 
-     main="age distribution", 
-     las=1, 
-     breaks=20)
-# library(histogram)
-# histogram(~age  , data = stroke_data_dummy,
-#           main = "distribution of stroke & age data",
-#           xlab = "stroke status",
-#           ylab = "age")
-# use Q-Q plot to check if age is normally distributed
-qqnorm(age, main = "age distribution")
-qqline(age, col = "red")
+# training and testing set
+# use the same seed later to make sure getting the same datase
+# data <- split_df(stroke_data_dummy, y=age, ratio = 0.7, seed = 1,
+# replace = FALSE)
+set.seed(1)
+no_rows_data <- nrow(stroke_data_dummy)
+sample <- sample(1:no_rows_data, size = round(0.7 * no_rows_data), replace = 
+                   , FALSE)
+data_train <- stroke_data_dummy[sample, ]
+data_test <- stroke_data_dummy[-sample, ]
 
-# p-value < 2.2e-16, dependent variable is not normally distributed
-library(car)
-# correlation check of continuous variables
-library(psych)
-pairs.panels(continuous_data, 
-             method = "pearson", # correlation method
-             hist.col = "#00AFBB",
-             density = TRUE,  # show density plots
-             ellipses = TRUE, # show correlation ellipses
-             main = "correlation of continuous variables"
-)
-# dichotomous correlation
-stroke_matrix <- cor(dichotomous_data)
-corrplot(stroke_matrix, type = "upper")
-cor(dichotomous_data[])
-# show the four highest correlation values
-cor(subset(dichotomous_data, select = c(age, ever_married, work_type_1, smoking_status_4)))
-
+# building the MLR model
 # initial model
+# attach(data$train)
+# detach(data$train)
 fit <- lm(age ~ 
             hypertension + heart_disease + ever_married +    
             stroke + bmi + avg_glucose_level +  
@@ -194,67 +128,20 @@ fit <- lm(age ~
             work_type_5 +
             smoking_status_1 + smoking_status_2 + smoking_status_3 + 
             smoking_status_4 , 
-          data = stroke_data_dummy)
+          data = data_train)
 summary(fit)
-# rebuild
-fit <- lm(age ~ 
-            hypertension + heart_disease + ever_married +    
-            stroke + bmi + avg_glucose_level +  
-            work_type_1 + work_type_2 + work_type_3 + work_type_4  + 
-            smoking_status_1 + smoking_status_2 + smoking_status_3 , 
-          data = stroke_data_dummy)
-summary(fit)
-# variance inflation factor
-vif(fit)
-# normality check
-library(ggplot2)
-# plot residuals
-# opar <- par(no.readonly = TRUE)
-# par(mfrow=c(2, 2))
+confint(fit, "(Intercept)", level = 0.95)
 
-# confint(fit, "(Intercept)", level = 0.95)
-# par(mfrow=c(1, 1))
-# stroke_data_dummy[c(2020, 873), c('age', 'bmi', 'avg_glucose_level')]
-
-# avPlots(fit)
-# Linearity
-# crPlots(fit)
+# assumption - linearity
+library(car)
+# residuals & fitted
+plot(fit, which = 1)
 
 # outliers
-# library(qqplot)
-library("car")
-# qqplot continous variables
-qqPlot(stroke_data_dummy$bmi,
-              main = "bmi")
-qqPlot(stroke_data_dummy$avg_glucose_level,
-       main = "avg_glucose_level")
-
-
-plot(fit, pch = 10, cex = 2, main="Influential observations ") 
-abline(h = 4 * mean(fit, na.rm=T), col="red")  # add cutoff line
-text(x = 1:length(fit) + 1, y = fit, 
-     labels=ifelse(fit > 4 * mean(fit, na.rm = T), 
-                   names(fit),""),col="red")
-
-# list outliers' value
-# stroke_data_dummy[c(4030,2020, 181), c("bmi") ]
-stroke_data_dummy[c(4030, 2020), c('age', 'bmi', 'avg_glucose_level')]
-# stroke_data_dummy[stroke_data_dummy$bmi >70, ]
-# remove the clearly wrong collected data
-# two rows are removed
-stroke_data_dummy <- stroke_data_dummy[-c(4030, 2020), ]
-# the model improved a little
-# replace the diabetes with dummied variables
-
-# recheck the model
-fit <- lm(age ~ 
-            hypertension + heart_disease + ever_married +    
-            stroke + bmi + avg_glucose_level +  
-            work_type_1 + work_type_2 + work_type_3 + work_type_4  + 
-            smoking_status_1 + smoking_status_2 + smoking_status_3 , 
-          data = stroke_data_dummy)
-
-summary(fit)
+qqPlot(fit, id.method="identify", 
+       label = row.names(id),
+       simulate=TRUE, which = 2,
+       main="Q-Q Plot")
 
 # histogram of the studentized
 # residuals and superimposes a normal curve, kernel-density curve, and rug plot
@@ -273,26 +160,127 @@ lines(density(student_fit)$x, density(student_fit)$y,
 legend("topright", legend = c("normal curve", "kernel density curve"), 
        lty = 1:2, col = c("blue", "red"), cex = 0.7)
 
-# 
-# 
-# visualization
-library(car)
-outlierTest(fit)
-# p-value is 2.7031e-05 
-# delete this outlier
-stroke_data_dummy[c(433), ]
-stroke_data_dummy <- stroke_data_dummy[-c(433), ]
+# Influential observations
+plot(fit, pch = 10, cex = 2, main="Influential observations ") 
+abline(h = 4 * mean(fit, na.rm=T), col="red")  # add cutoff line
+text(x = 1:length(fit) + 1, y = fit, 
+     labels=ifelse(fit > 4 * mean(fit, na.rm = T), 
+                   names(fit),""),col="red")
 
-# rebuild model
+
+# influential observations
+cutoff <- 4/((nrow(data_train) - length(fit$coefficients) - 2)) 
+plot(fit, which = 4, cook.levels = cutoff)
+
+# test outliers
+outlierTest(fit)
+# plot bmi & avg_glucose_level
+plot(stroke_data_dummy$bmi, main = "bmi")
+plot(stroke_data_dummy$avg_glucose_level, main = "average glucose level")
+
+# remove wrong values of bmi
+subset(data_train , bmi > 90, 
+       select = c('id', 'age', 'bmi', 'avg_glucose_level'))
+
+# list outliers' value
+subset(data_train , id %in% c(40704, 54724,47917 ,29552), 
+       select = c('id', 'age', 'bmi', 'avg_glucose_level'))
+# remain outliers because the p-value is less than 0.05
+
+
+# remove outlier
+# stroke_data_dummy <- 
+stroke_data_dummy <- (stroke_data_dummy[stroke_data_dummy$id != 56420 & 
+                                          stroke_data_dummy$id !=51856, ])
+
+
+
+# resplit training and testing set
+# training and testing set
+# use the same seed later to make sure getting the same datase
+set.seed(1)
+no_rows_data <- nrow(stroke_data_dummy)
+sample <- sample(1:no_rows_data, size = round(0.7 * no_rows_data), replace = 
+                   , FALSE)
+data_train <- stroke_data_dummy[sample, ]
+data_test <- stroke_data_dummy[-sample, ]
+
 fit <- lm(age ~ 
             hypertension + heart_disease + ever_married +    
             stroke + bmi + avg_glucose_level +  
-            work_type_1 + work_type_2 + work_type_3 + work_type_4  + 
-            smoking_status_1 + smoking_status_2 + smoking_status_3 , 
-          data = stroke_data_dummy)
+            work_type_1 + work_type_2 + work_type_3 + work_type_4 + 
+            work_type_5 +
+            smoking_status_1 + smoking_status_2 + smoking_status_3 + 
+            smoking_status_4 , 
+          data = data_train)
 summary(fit)
-# test outliers
-outlierTest(fit)
+str(stroke_data_dummy)
+# assumption - linearity
+# par(opar)
+# par(mfrow=c(2, 2))
+avPlots(fit)
+# 
+# termplot(fit, terms = "value1", 
+#          partial.resid = TRUE, 
+#          se = TRUE, ask = FALSE, las = 1, 
+#          col.res = "black")
+
+influencePlot(fit, main="Influence Plot",
+              sub="Circle size is proportional to Cook's distance")
+
+# list outliers' value
+subset(data_train , id %in% c(54724,5387 ,18605,46136,26191,13861), 
+       select = c('id', 'age', 'bmi', 'avg_glucose_level'))
+
+# resplit training and testing set
+# training and testing set
+# use the same seed later to make sure getting the same datase
+# set.seed(1)
+# no_rows_data <- nrow(stroke_data_dummy)
+# sample <- sample(1:no_rows_data, size = round(0.7 * no_rows_data), replace = 
+#                    , FALSE)
+# data_train <- stroke_data_dummy[sample, ]
+# data_test <- stroke_data_dummy[-sample, ]
+# 
+# fit <- lm(age ~ 
+#             hypertension + heart_disease + ever_married +    
+#             stroke + bmi + avg_glucose_level +  
+#             work_type_1 + work_type_2 + work_type_3 + work_type_4 + 
+#             work_type_5 +
+#             smoking_status_1 + smoking_status_2 + smoking_status_3 + 
+#             smoking_status_4 , 
+#           data = data_train)
+# summary(fit)
+
+# rsquared value decreased a little
+
+
+# check correlation of variables
+continuous_data <- subset(stroke_data_dummy, select = c(age, avg_glucose_level, bmi))
+dichotomous_data <- subset(stroke_data_dummy, select = -c(avg_glucose_level, bmi, id))
+
+# correlation check of continuous variables
+library(psych)
+pairs.panels(continuous_data, 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE, # show correlation ellipses
+             main = "correlation of continuous variables"
+)
+# dichotomous correlation
+stroke_matrix <- cor(dichotomous_data)
+corrplot(stroke_matrix, type = "upper")
+# show the four highest correlation values
+cor(subset(dichotomous_data, select = c(age, ever_married, work_type_1, smoking_status_4)))
+
+# variance inflation factor
+# vif(fit)
+# normality check
+library(ggplot2)
+
+# Linearity
+# crPlots(fit) #Model has aliased term(s); df ambiguous.
 
 # assumption 5 - test normality of the model
 stdres = rstudent(fit)
@@ -303,7 +291,7 @@ qqnorm(stdres,
 qqline(stdres, col = 2)
 
 #create histogram of residuals
-ggplot(data = stroke_data_dummy, 
+ggplot(data = data_train, 
        aes(x = fit$residuals)) +
   geom_histogram(fill = 'steelblue', color = 'darkblue') +
   labs(title = 'Histogram of Residuals', 
@@ -311,19 +299,10 @@ ggplot(data = stroke_data_dummy,
        y = 'Frequency')
 summary(fit)
 
-
-
-
-
-# upper end improved but the lower end is highly skewes
-
-
-influencePlot(fit, main="Influence Plot",
-              sub="Circle size is proportional to Cook's distance")
-
-
 # homescedasticity
 ncvTest(fit)
+# plot(fit ,which=1)
+
 # p-value is greater than 0.05, we would assume that the error variance
 # unchanges with the level of the fitted values
 opar <- par(no.readonly = TRUE)
@@ -335,13 +314,10 @@ par(opar)
 spreadLevelPlot(fit)
 # Suggested power transformation:  0.5409144 
 # a transformation is required
-# https://boostedml.com/2019/03/linear-regression-plots-scale-location-plot.html
-bptest(fit, studentize = TRUE)
+library(lmtest)
 bptest(fit, studentize = FALSE)
 # show different conclusion with ncvTest
-
-shapiro.test(residuals(fit))
-
+# shapiro.test(residuals(fit))
 
 
 # global validation
@@ -350,52 +326,55 @@ gvmodel <- gvlma(fit)
 summary(gvmodel)
 # Heteroscedasticity    Assumptions acceptable
 
+gobble1 <- Boot(fit, R=1000)
+summary(gobble1)
+
 # 
 library(car)
-vif(fit)
-sqrt(vif(fit)) > 2
-
+# vif(fit)
+# sqrt(vif(fit)) > 2
+alias(fit)
 # work_type_1 + work_type_4  + 
 fit <- lm(age ~ 
             hypertension + heart_disease + ever_married +    
             stroke + bmi + avg_glucose_level +  
             work_type_2 + work_type_3 + 
             smoking_status_1 + smoking_status_2 + smoking_status_3 , 
-          data = stroke_data_dummy)
+          data = data_train)
 summary(fit)
 
-
-summary(powerTransform(stroke_data_dummy$age))
+summary(powerTransform(data_train$age))
 # power 0.8268
 # apply a square-root transformation to improve the
 # model’s fit to normality
 # p-val 2.22e-16, that means there’s no strong
 # evidence that a transformation is needed in this case
 
-sqr_age <- sqrt(stroke_data_dummy$age)
-stroke_data_dummy$sqr_age <- sqr_age
+sqr_age <- sqrt(data_train$age)
+data_train$sqr_age <- sqr_age
 
 # compare
 model <- lm(age ~ 
-            hypertension + heart_disease + ever_married +    
-            stroke + bmi + avg_glucose_level +  
-            work_type_2 + work_type_3 + 
-            smoking_status_1 + smoking_status_2 + smoking_status_3 , 
-          data = stroke_data_dummy)
+              hypertension + heart_disease + ever_married +    
+              stroke + bmi + avg_glucose_level +  
+              work_type_2 + work_type_3 + 
+              smoking_status_1 + smoking_status_2 + smoking_status_3 , 
+            data = data_train)
 model_sqr <- lm(sqr_age ~ 
-               hypertension + heart_disease + ever_married +    
-               stroke + bmi + avg_glucose_level +  
-               work_type_2 + work_type_3 + 
-               smoking_status_1 + smoking_status_2 + smoking_status_3 , 
-             data = stroke_data_dummy)
+                  hypertension + heart_disease + ever_married +    
+                  stroke + bmi + avg_glucose_level +  
+                  work_type_2 + work_type_3 + 
+                  smoking_status_1 + smoking_status_2 + smoking_status_3 , 
+                data = data_train)
 AIC(model, model_sqr)
 # Durbin Waston test
-durbinWatsonTest(model2)
+durbinWatsonTest(model_sqr)
 
 # check spread
-spreadLevelPlot(model2)
+spreadLevelPlot(model_sqr)
 # Suggested power transformation:  1.367796 
-
+vif(model)
+vif(model_sqr)
 # STEPWISE REGRESSION
 library(MASS)
 fit_test <- lm(sqr_age ~ 
@@ -403,22 +382,15 @@ fit_test <- lm(sqr_age ~
                  stroke + bmi + avg_glucose_level +  
                  work_type_2 + work_type_3 + 
                  smoking_status_1 + smoking_status_2 + smoking_status_3 , 
-               data = stroke_data_dummy)
+               data = data_train)
 stepAIC(fit_test, direction="backward")
 # worktype_3 is dropped
-# replacing bmi with the simpler overweight
-overweight_col <- cut(stroke_data_dummy$bmi,
-                     breaks = c(0, 25, Inf),
-                     labels = c(0, 1),
-                     right = TRUE,
-                     order = FALSE)
-stroke_data_dummy$overweight <- overweight_col
 # re-backward by replacing bmi with overweight 
 fit_test <- lm(sqr_age ~ 
                  hypertension + heart_disease + ever_married +    
                  stroke + overweight + avg_glucose_level +  
-                 work_type_2 + work_type_3, 
-               data = stroke_data_dummy)
+                 work_type_2 , 
+               data = data_train)
 stepAIC(fit_test, direction="backward")
 
 
@@ -427,51 +399,50 @@ library(leaps)
 leaps <-regsubsets(sqr_age ~ 
                      hypertension + heart_disease + ever_married +    
                      stroke + overweight + avg_glucose_level +  
-                     work_type_2 + work_type_3,
-                   data=stroke_data_dummy,
+                     work_type_2 ,
+                   data = data_train,
                    nbest=4)
 plot(leaps, scale="adjr2")
 summary(fit_test)
-
 
 # examine accuracy
 fit_model <- lm(age ~ 
                   hypertension + heart_disease + ever_married +    
                   stroke + bmi + avg_glucose_level +  
-                  work_type_2 + work_type_3 + 
+                  work_type_2 +  
                   smoking_status_1 + smoking_status_2 + smoking_status_3,
-                data=stroke_data_dummy)
+                data = data_train)
 
 fit_model_sqr <- lm(sqr_age ~ 
-                  hypertension + heart_disease + ever_married +    
-                  stroke + bmi + avg_glucose_level +  
-                  work_type_2 + work_type_3 + 
-                  smoking_status_1 + smoking_status_2 + smoking_status_3,
-                data=stroke_data_dummy)
+                      hypertension + heart_disease + ever_married +    
+                      stroke + bmi + avg_glucose_level +  
+                      work_type_2 +  
+                      smoking_status_1 + smoking_status_2 + smoking_status_3,
+                    data = data_train)
 
 fit_model_sqr_simpler <- lm(sqr_age ~ 
-                      hypertension + heart_disease + ever_married +    
-                      stroke + overweight + avg_glucose_level +  
-                      work_type_2 + work_type_3 ,
-                    data=stroke_data_dummy)
+                              hypertension + heart_disease + ever_married +    
+                              stroke + overweight + avg_glucose_level +  
+                              work_type_2  ,
+                            data = data_train)
 
-predicted <- predict(fit_model, stroke_data_dummy)
-predicted_sqr <- predict(fit_model_sqr, stroke_data_dummy)
-predicted_simpler <- predict(fit_model_sqr_simpler, stroke_data_dummy)
+predicted <- predict(fit_model, data_test)
+predicted_sqr <- predict(fit_model_sqr, data_test)
+predicted_simpler <- predict(fit_model_sqr_simpler, data_test)
 # model1 - age ~ .. + smoking_status
-actuals_predictions <- data.frame(cbind(actuals = stroke_data_dummy$age, 
+actuals_predictions <- data.frame(cbind(actuals = data_test$age, 
                                         predicted = predicted))
 head(actuals_predictions)
 summary(fit_model)
 # model2 - sqr age + smoking_status
-actuals_predictions_sqr <- data.frame(cbind(actuals = stroke_data_dummy$age, 
-                                        predicted = predicted_sqr))
+actuals_predictions_sqr <- data.frame(cbind(actuals = data_test$age, 
+                                            predicted = predicted_sqr))
 head(actuals_predictions_sqr)
 summary(fit_model_sqr)
 
 # model3 - sqr age + simpler variables
-actuals_predictions_simpler <- data.frame(cbind(actuals = stroke_data_dummy$age, 
-                                            predicted = predicted_simpler))
+actuals_predictions_simpler <- data.frame(cbind(actuals = test_data$age, 
+                                                predicted = predicted_simpler))
 head(actuals_predictions_simpler)
 summary(fit_model_sqr_simpler)
 
@@ -482,4 +453,4 @@ correlation_accuracy
 min_max_accuracy <- mean(apply(actuals_predictions, 1, min) / 
                            apply(actuals_predictions, 1, max))
 min_max_accuracy
-sigma(fit_model)/ mean(actuals_predictions$log_age)
+sigma(fit_model)/ mean(actuals_predictions$age)
