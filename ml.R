@@ -208,13 +208,6 @@ summary(fit)
 vif(fit)
 # normality check
 library(ggplot2)
-#create histogram of residuals
-ggplot(data = stroke_data_dummy, 
-       aes(x = fit$residuals)) +
-  geom_histogram(fill = 'steelblue', color = 'darkblue') +
-  labs(title = 'Histogram of Residuals', 
-       x = 'Residuals', 
-       y = 'Frequency')
 # plot residuals
 # opar <- par(no.readonly = TRUE)
 # par(mfrow=c(2, 2))
@@ -301,9 +294,27 @@ summary(fit)
 # test outliers
 outlierTest(fit)
 
-# test normality of the model
-qqnorm(rstudent(fit))
-qqline(rstudent(fit))
+# assumption 5 - test normality of the model
+stdres = rstudent(fit)
+qqnorm(stdres, 
+       ylab="Standardized Residuals",  
+       xlab="Normal Scores", 
+       main="age of patient model") 
+qqline(stdres, col = 2)
+
+#create histogram of residuals
+ggplot(data = stroke_data_dummy, 
+       aes(x = fit$residuals)) +
+  geom_histogram(fill = 'steelblue', color = 'darkblue') +
+  labs(title = 'Histogram of Residuals', 
+       x = 'Residuals', 
+       y = 'Frequency')
+summary(fit)
+
+
+
+
+
 # upper end improved but the lower end is highly skewes
 
 
@@ -313,13 +324,25 @@ influencePlot(fit, main="Influence Plot",
 
 # homescedasticity
 ncvTest(fit)
-# p-value is significant (<0.05), we would assume that the error variance
-# changes with the level of the fitted values
-
-# 
+# p-value is greater than 0.05, we would assume that the error variance
+# unchanges with the level of the fitted values
+opar <- par(no.readonly = TRUE)
+par(mfrow=c(2, 2), mar=c(2,2,2,2) )
+plot(fit)
+par(opar)
+# scatter plot of the absolute standardized residuals
+# versus the fitted values and superimposes a line of best fit
 spreadLevelPlot(fit)
 # Suggested power transformation:  0.5409144 
 # a transformation is required
+# https://boostedml.com/2019/03/linear-regression-plots-scale-location-plot.html
+bptest(fit, studentize = TRUE)
+bptest(fit, studentize = FALSE)
+# show different conclusion with ncvTest
+
+shapiro.test(residuals(fit))
+
+
 
 # global validation
 library(gvlma)
@@ -349,47 +372,68 @@ summary(powerTransform(stroke_data_dummy$age))
 # p-val 2.22e-16, that means there’s no strong
 # evidence that a transformation is needed in this case
 
-log_age <- sqrt(stroke_data_dummy$age)
-stroke_data_dummy$log_age <- log_age
+sqr_age <- sqrt(stroke_data_dummy$age)
+stroke_data_dummy$sqr_age <- sqr_age
 
 # compare
-model1 <- lm(age ~ 
+model <- lm(age ~ 
             hypertension + heart_disease + ever_married +    
             stroke + bmi + avg_glucose_level +  
             work_type_2 + work_type_3 + 
             smoking_status_1 + smoking_status_2 + smoking_status_3 , 
           data = stroke_data_dummy)
-model2 <- lm(log_age ~ 
+model_sqr <- lm(sqr_age ~ 
                hypertension + heart_disease + ever_married +    
                stroke + bmi + avg_glucose_level +  
                work_type_2 + work_type_3 + 
                smoking_status_1 + smoking_status_2 + smoking_status_3 , 
              data = stroke_data_dummy)
-AIC(model1, model2)
+AIC(model, model_sqr)
+# Durbin Waston test
+durbinWatsonTest(model2)
 
-# 
+# check spread
 spreadLevelPlot(model2)
 # Suggested power transformation:  1.367796 
 
 # STEPWISE REGRESSION
 library(MASS)
-fit_test <- lm(log_age ~ 
+fit_test <- lm(sqr_age ~ 
                  hypertension + heart_disease + ever_married +    
                  stroke + bmi + avg_glucose_level +  
                  work_type_2 + work_type_3 + 
                  smoking_status_1 + smoking_status_2 + smoking_status_3 , 
                data = stroke_data_dummy)
 stepAIC(fit_test, direction="backward")
+# worktype_3 is dropped
+# replacing bmi with the simpler overweight
+overweight_col <- cut(stroke_data_dummy$bmi,
+                     breaks = c(0, 25, Inf),
+                     labels = c(0, 1),
+                     right = TRUE,
+                     order = FALSE)
+stroke_data_dummy$overweight <- overweight_col
+# re-backward by replacing bmi with overweight 
+fit_test <- lm(sqr_age ~ 
+                 hypertension + heart_disease + ever_married +    
+                 stroke + overweight + avg_glucose_level +  
+                 work_type_2 + work_type_3, 
+               data = stroke_data_dummy)
+stepAIC(fit_test, direction="backward")
+
+
 # leaps
 library(leaps)
-leaps <-regsubsets(log_age ~ 
+leaps <-regsubsets(sqr_age ~ 
                      hypertension + heart_disease + ever_married +    
-                     stroke + bmi + avg_glucose_level +  
-                     work_type_2 + work_type_3 + 
-                     smoking_status_1 + smoking_status_2 + smoking_status_3,
+                     stroke + overweight + avg_glucose_level +  
+                     work_type_2 + work_type_3,
                    data=stroke_data_dummy,
                    nbest=4)
 plot(leaps, scale="adjr2")
+summary(fit_test)
+
+
 # examine accuracy
 fit_model <- lm(age ~ 
                   hypertension + heart_disease + ever_married +    
@@ -398,29 +442,44 @@ fit_model <- lm(age ~
                   smoking_status_1 + smoking_status_2 + smoking_status_3,
                 data=stroke_data_dummy)
 
-fit_model_log <- lm(log_age ~ 
+fit_model_sqr <- lm(sqr_age ~ 
                   hypertension + heart_disease + ever_married +    
                   stroke + bmi + avg_glucose_level +  
                   work_type_2 + work_type_3 + 
                   smoking_status_1 + smoking_status_2 + smoking_status_3,
                 data=stroke_data_dummy)
 
-predicted <- predict(fit_model, stroke_data_dummy)
-predicted_log <- predict(fit_model_log, stroke_data_dummy)
-# converted_murder_sqrt <- predicted_murder_sqrt ^2
+fit_model_sqr_simpler <- lm(sqr_age ~ 
+                      hypertension + heart_disease + ever_married +    
+                      stroke + overweight + avg_glucose_level +  
+                      work_type_2 + work_type_3 ,
+                    data=stroke_data_dummy)
 
+predicted <- predict(fit_model, stroke_data_dummy)
+predicted_sqr <- predict(fit_model_sqr, stroke_data_dummy)
+predicted_simpler <- predict(fit_model_sqr_simpler, stroke_data_dummy)
+# model1 - age ~ .. + smoking_status
 actuals_predictions <- data.frame(cbind(actuals = stroke_data_dummy$age, 
                                         predicted = predicted))
 head(actuals_predictions)
+summary(fit_model)
+# model2 - sqr age + smoking_status
+actuals_predictions_sqr <- data.frame(cbind(actuals = stroke_data_dummy$age, 
+                                        predicted = predicted_sqr))
+head(actuals_predictions_sqr)
+summary(fit_model_sqr)
 
+# model3 - sqr age + simpler variables
+actuals_predictions_simpler <- data.frame(cbind(actuals = stroke_data_dummy$age, 
+                                            predicted = predicted_simpler))
+head(actuals_predictions_simpler)
+summary(fit_model_sqr_simpler)
 
 # 
 correlation_accuracy <- cor(actuals_predictions)
 correlation_accuracy
-
 # MAPE
 min_max_accuracy <- mean(apply(actuals_predictions, 1, min) / 
                            apply(actuals_predictions, 1, max))
 min_max_accuracy
-
 sigma(fit_model)/ mean(actuals_predictions$log_age)
